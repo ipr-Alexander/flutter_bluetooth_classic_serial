@@ -25,6 +25,7 @@ abstract class FlutterBluetoothClassicPlatform extends PlatformInterface {
   Future<bool> isBluetoothEnabled();
   Future<bool> enableBluetooth();
   Future<List<Map<String, dynamic>>> getPairedDevices();
+  Future<List<Map<String, dynamic>>> getDiscoveredDevices();
   Future<bool> startDiscovery();
   Future<bool> stopDiscovery();
   Future<bool> connect(String address);
@@ -72,6 +73,12 @@ class _DefaultPlatform extends FlutterBluetoothClassicPlatform {
   @override
   Future<List<Map<String, dynamic>>> getPairedDevices() async {
     final result = await _channel.invokeMethod('getPairedDevices');
+    return List<Map<String, dynamic>>.from(result ?? []);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getDiscoveredDevices() async {
+    final result = await _channel.invokeMethod('getDiscoveredDevices');
     return List<Map<String, dynamic>>.from(result ?? []);
   }
 
