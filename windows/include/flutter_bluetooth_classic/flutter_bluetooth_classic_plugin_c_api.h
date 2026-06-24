@@ -12,6 +12,8 @@
 #if defined(__cplusplus)
 extern "C" {
 #endif
+// rename this from "FlutterBluetoothClassicPluginCApiRegisterWithRegistrar"
+// to "FlutterBluetoothClassicPluginRegisterWithRegistrar" without "CApi"
 FLUTTER_PLUGIN_EXPORT void FlutterBluetoothClassicPluginRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar);
 

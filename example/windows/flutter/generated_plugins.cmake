@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  flutter_bluetooth_classic_serial
+  flutter_bluetooth_classic
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

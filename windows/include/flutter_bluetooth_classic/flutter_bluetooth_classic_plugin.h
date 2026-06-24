@@ -13,6 +13,12 @@
 #include <string>
 #include <thread>
 
+// ADD THESE LINES
+#ifdef FLUTTER_PLUGIN_IMPL
+#define FLUTTER_PLUGIN_EXPORT __declspec(dllexport)
+#else
+#define FLUTTER_PLUGIN_EXPORT __declspec(dllimport)
+#endif
 
 namespace flutter_bluetooth_classic {
 
@@ -71,5 +77,15 @@ private:
 };
 
 } // namespace flutter_bluetooth_classic
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+FLUTTER_PLUGIN_EXPORT void FlutterBluetoothClassicPluginRegisterWithRegistrar(
+    FlutterDesktopPluginRegistrarRef registrar);
+
+#if defined(__cplusplus)
+} // extern "C"
+#endif
 
 #endif // FLUTTER_PLUGIN_FLUTTER_BLUETOOTH_CLASSIC_PLUGIN_H_

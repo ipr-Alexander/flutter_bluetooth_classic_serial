@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bluetooth_classic_serial/flutter_bluetooth_classic.dart';
+import 'package:flutter_bluetooth_classic/flutter_bluetooth_classic.dart';
 
 void main() {
   runApp(const MyApp());

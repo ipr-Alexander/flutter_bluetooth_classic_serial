@@ -5,7 +5,6 @@
 #include "../include/flutter_bluetooth_classic/flutter_bluetooth_classic_plugin.h"
 #include "flutter/generated_plugin_registrant.h"
 
-
 FlutterWindow::FlutterWindow(const flutter::DartProject &project)
     : project_(project) {}
 

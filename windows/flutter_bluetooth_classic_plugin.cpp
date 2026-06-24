@@ -8,13 +8,11 @@
 #include <windows.h>
 #include <ws2bth.h>
 
-
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
 #include <vector>
-
 
 namespace flutter_bluetooth_classic {
 
