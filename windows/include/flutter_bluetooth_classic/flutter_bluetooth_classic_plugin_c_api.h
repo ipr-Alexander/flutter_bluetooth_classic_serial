@@ -12,12 +12,11 @@
 #if defined(__cplusplus)
 extern "C" {
 #endif
-
-FLUTTER_PLUGIN_EXPORT void FlutterBluetoothClassicPluginCApiRegisterWithRegistrar(
+FLUTTER_PLUGIN_EXPORT void FlutterBluetoothClassicPluginRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar);
 
 #if defined(__cplusplus)
-}  // extern "C"
+} // extern "C"
 #endif
 
-#endif  // FLUTTER_PLUGIN_FLUTTER_BLUETOOTH_CLASSIC_PLUGIN_C_API_H_
+#endif // FLUTTER_PLUGIN_FLUTTER_BLUETOOTH_CLASSIC_PLUGIN_C_API_H_

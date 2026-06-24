@@ -7,7 +7,7 @@ issue_tracker: https://github.com/C0DE-IN/flutter_bluetooth_classic_serial/issue
 documentation: https://github.com/C0DE-IN/flutter_bluetooth_classic_serial/blob/main/README.md
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
   flutter: ">=3.10.0"
 
 dependencies:
@@ -30,7 +30,7 @@ flutter:
         pluginClass: FlutterBluetoothClassicPlugin
       windows:
         pluginClass: FlutterBluetoothClassicPlugin
-        fileName: flutter_bluetooth_classic_plugin.cpp
+        fileName: flutter_bluetooth_classic_plugin_c_api.cpp
 
 topics:
   - bluetooth

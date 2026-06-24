@@ -2,11 +2,14 @@
 
 #include <flutter/plugin_registrar_windows.h>
 
-#include "flutter_bluetooth_classic_plugin.h"
+#include "include/flutter_bluetooth_classic/flutter_bluetooth_classic_plugin.h"
 
-void FlutterBluetoothClassicPluginCApiRegisterWithRegistrar(
+// rename this from "FlutterBluetoothClassicPluginCApiRegisterWithRegistrar"
+// to "FlutterBluetoothClassicPluginRegisterWithRegistrar" without "CApi"
+void FlutterBluetoothClassicPluginRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar) {
-  flutter_bluetooth_classic::FlutterBluetoothClassicPlugin::RegisterWithRegistrar(
-      flutter::PluginRegistrarManager::GetInstance()
-          ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar));
+  flutter_bluetooth_classic::FlutterBluetoothClassicPlugin::
+      RegisterWithRegistrar(
+          flutter::PluginRegistrarManager::GetInstance()
+              ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar));
 }
