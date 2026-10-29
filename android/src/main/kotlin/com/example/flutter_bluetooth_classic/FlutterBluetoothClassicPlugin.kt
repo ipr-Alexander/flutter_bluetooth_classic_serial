@@ -45,6 +45,9 @@ class FlutterBluetoothClassicPlugin: FlutterPlugin, MethodCallHandler, ActivityA
   private var bluetoothAdapter: BluetoothAdapter? = null
   private var connectTask: ConnectTask? = null
   
+  // Store discovered devices during discovery
+  private val discoveredDevices = mutableListOf<Map<String, Any>>()
+  
   private var stateStreamHandler = BluetoothStateStreamHandler()
   private var connectionStreamHandler = BluetoothConnectionStreamHandler()
   private var dataStreamHandler = BluetoothDataStreamHandler()
@@ -137,6 +140,9 @@ class FlutterBluetoothClassicPlugin: FlutterPlugin, MethodCallHandler, ActivityA
           }
         }
       }
+      "getDiscoveredDevices" -> {
+        result.success(ArrayList(discoveredDevices))
+      }
       "startDiscovery" -> {
         if (bluetoothAdapter == null) {
           result.error("BLUETOOTH_UNAVAILABLE", "Bluetooth is not available on this device", null)
@@ -145,6 +151,9 @@ class FlutterBluetoothClassicPlugin: FlutterPlugin, MethodCallHandler, ActivityA
         
         checkPermissions { granted ->
           if (granted) {
+            // Clear previously discovered devices
+            discoveredDevices.clear()
+            
             // Register for device discovery
             val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
             context.registerReceiver(discoveryReceiver, filter)
@@ -224,19 +233,40 @@ class FlutterBluetoothClassicPlugin: FlutterPlugin, MethodCallHandler, ActivityA
         result.success(true)
       }
       "sendData" -> {
-        val data = call.argument<List<Int>>("data")
-        if (data == null) {
+        val rawData = call.argument<Any>("data")
+
+        if (rawData == null) {
           result.error("INVALID_ARGUMENT", "Data is required", null)
           return
         }
-        
+
+        val byteArray: ByteArray
+        when (rawData) {
+          is List<*> -> {
+            try {
+              @Suppress("UNCHECKED_CAST")
+              val dataList = rawData as List<Int>
+              byteArray = dataList.map { it.toByte() }.toByteArray()
+            } catch (e: ClassCastException) {
+              result.error("INVALID_DATA_FORMAT", "Data list contains non-integer values: ${e.message}", null)
+              return
+            }
+          }
+          is ByteArray -> {
+            byteArray = rawData
+          }
+          else -> {
+            result.error("INVALID_DATA_TYPE", "Data argument must be List<int> or ByteArray, got ${rawData.javaClass.name}", null)
+            return
+          }
+        }
+
         if (connectTask == null || !connectTask!!.isConnected()) {
           result.error("NOT_CONNECTED", "Not connected to any device", null)
           return
         }
-        
+
         try {
-          val byteArray = data.map { it.toByte() }.toByteArray()
           connectTask?.write(byteArray)
           result.success(true)
         } catch (e: Exception) {
@@ -342,17 +372,28 @@ class FlutterBluetoothClassicPlugin: FlutterPlugin, MethodCallHandler, ActivityA
           val deviceName = device.name ?: "Unknown"
           val deviceAddress = device.address
           
-          // We can notify via the state channel for simplicity
+          // Create device map
           val deviceMap = mapOf(
-            "event" to "deviceFound",
-            "device" to mapOf(
-              "name" to deviceName,
-              "address" to deviceAddress,
-              "paired" to (device.bondState == BluetoothDevice.BOND_BONDED)
-            )
+            "name" to deviceName,
+            "address" to deviceAddress,
+            "paired" to (device.bondState == BluetoothDevice.BOND_BONDED)
           )
           
-          stateStreamHandler.send(deviceMap)
+          // Add to discovered devices list (avoid duplicates)
+          val existingIndex = discoveredDevices.indexOfFirst { it["address"] == deviceAddress }
+          if (existingIndex >= 0) {
+            discoveredDevices[existingIndex] = deviceMap
+          } else {
+            discoveredDevices.add(deviceMap)
+          }
+          
+          // Notify via the state channel
+          val eventMap = mapOf(
+            "event" to "deviceFound",
+            "device" to deviceMap
+          )
+          
+          stateStreamHandler.send(eventMap)
         }
       }
     }

@@ -1,3 +1,13 @@
+## 1.0.4
+
+### Bug Fixes
+- 🤖 Android: discovery events are now sent as `deviceFound` events, so `onDeviceDiscovered`
+  fires instead of the state stream throwing a `TypeError` for every device found
+- 🤖 Android: added `getDiscoveredDevices()`, with each device listed once per discovery session
+- 🤖 Android: `sendData` accepts both `List<int>` and `Uint8List`
+
+Ported from the published `flutter_bluetooth_classic_serial` 1.3.2 Android implementation.
+
 ## 1.0.3
 
 ### Bug Fixes
