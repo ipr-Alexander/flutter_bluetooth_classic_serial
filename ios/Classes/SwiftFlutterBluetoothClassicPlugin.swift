@@ -1,66 +1,73 @@
 import Flutter
 import UIKit
-import CoreBluetooth
+import ExternalAccessory
 
 // MARK: - Plugin
+// iOS only exposes Bluetooth Classic to apps through ExternalAccessory (MFi accessories).
+// The app must list the accessory's protocol strings under UISupportedExternalAccessoryProtocols.
 public class SwiftFlutterBluetoothClassicPlugin: NSObject, FlutterPlugin {
   private let methodChannel: FlutterMethodChannel
   private let stateChannel: FlutterEventChannel
   private let connectionChannel: FlutterEventChannel
   private let dataChannel: FlutterEventChannel
-  
+
   private let stateStreamHandler = BluetoothStateStreamHandler()
   private let connectionStreamHandler = BluetoothConnectionStreamHandler()
   private let dataStreamHandler = BluetoothDataStreamHandler()
-  
-  private var bluetoothManager: BluetoothManager?
-  
+
+  private var accessoryManager: AccessoryManager?
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = SwiftFlutterBluetoothClassicPlugin(registrar: registrar)
     registrar.addMethodCallDelegate(instance, channel: instance.methodChannel)
   }
-    init(registrar: FlutterPluginRegistrar) {
+
+  init(registrar: FlutterPluginRegistrar) {
     methodChannel = FlutterMethodChannel(name: "com.flutter_bluetooth_classic.plugin/flutter_bluetooth_classic", binaryMessenger: registrar.messenger())
     stateChannel = FlutterEventChannel(name: "com.flutter_bluetooth_classic.plugin/flutter_bluetooth_classic_state", binaryMessenger: registrar.messenger())
     connectionChannel = FlutterEventChannel(name: "com.flutter_bluetooth_classic.plugin/flutter_bluetooth_classic_connection", binaryMessenger: registrar.messenger())
     dataChannel = FlutterEventChannel(name: "com.flutter_bluetooth_classic.plugin/flutter_bluetooth_classic_data", binaryMessenger: registrar.messenger())
-    
+
     super.init()
-    
+
     stateChannel.setStreamHandler(stateStreamHandler)
     connectionChannel.setStreamHandler(connectionStreamHandler)
     dataChannel.setStreamHandler(dataStreamHandler)
-    
-    bluetoothManager = BluetoothManager(
+
+    accessoryManager = AccessoryManager(
       stateHandler: stateStreamHandler,
       connectionHandler: connectionStreamHandler,
       dataHandler: dataStreamHandler
     )
   }
-  
+
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "isBluetoothSupported":
-      result(true) // iOS always supports Bluetooth
-      
+      result(true)
+
     case "isBluetoothEnabled":
-      bluetoothManager?.isBluetoothEnabled(completion: result)
-      
+      // ExternalAccessory exposes no radio state; reading it would need CoreBluetooth and its permission prompt.
+      result(true)
+
     case "enableBluetooth":
-      // iOS doesn't allow programmatic enabling of Bluetooth
       result(FlutterError(code: "UNSUPPORTED",
                          message: "Cannot enable Bluetooth programmatically on iOS",
                          details: nil))
-      
+
     case "getPairedDevices":
-      bluetoothManager?.getPairedDevices(completion: result)
-      
+      accessoryManager?.getPairedDevices(completion: result)
+
+    case "getDiscoveredDevices":
+      accessoryManager?.getDiscoveredDevices(completion: result)
+
     case "startDiscovery":
-      bluetoothManager?.startDiscovery(completion: result)
-      
+      accessoryManager?.startDiscovery(completion: result)
+
     case "stopDiscovery":
-      bluetoothManager?.stopDiscovery(completion: result)
-      
+      // The system accessory picker is modal and cannot be dismissed programmatically.
+      result(true)
+
     case "connect":
       guard let args = call.arguments as? [String: Any],
             let address = args["address"] as? String else {
@@ -69,22 +76,27 @@ public class SwiftFlutterBluetoothClassicPlugin: NSObject, FlutterPlugin {
                            details: nil))
         return
       }
-      bluetoothManager?.connect(address: address, completion: result)
-      
+      accessoryManager?.connect(address: address, completion: result)
+
     case "disconnect":
-      bluetoothManager?.disconnect(completion: result)
-      
+      accessoryManager?.disconnect(completion: result)
+
     case "sendData":
-      guard let args = call.arguments as? [String: Any],
-            let data = args["data"] as? [Int] else {
+      // A Dart Uint8List arrives as FlutterStandardTypedData, a plain List<int> as [Int].
+      let args = call.arguments as? [String: Any]
+      let payload: Data
+      if let typed = args?["data"] as? FlutterStandardTypedData {
+        payload = typed.data
+      } else if let list = args?["data"] as? [Int] {
+        payload = Data(list.map { UInt8(truncatingIfNeeded: $0) })
+      } else {
         result(FlutterError(code: "INVALID_ARGUMENT",
                            message: "Data is required",
                            details: nil))
         return
       }
-      let bytes = data.map { UInt8($0) }
-      bluetoothManager?.sendData(Data(bytes), completion: result)
-      
+      accessoryManager?.sendData(payload, protocolString: args?["protocol"] as? String, completion: result)
+
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -94,17 +106,17 @@ public class SwiftFlutterBluetoothClassicPlugin: NSObject, FlutterPlugin {
 // MARK: - Stream Handlers
 class BluetoothStateStreamHandler: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
-  
+
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
     return nil
   }
-  
+
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     eventSink = nil
     return nil
   }
-  
+
   func send(_ data: Any) {
     DispatchQueue.main.async { [weak self] in
       self?.eventSink?(data)
@@ -114,17 +126,17 @@ class BluetoothStateStreamHandler: NSObject, FlutterStreamHandler {
 
 class BluetoothConnectionStreamHandler: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
-  
+
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
     return nil
   }
-  
+
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     eventSink = nil
     return nil
   }
-  
+
   func send(_ data: Any) {
     DispatchQueue.main.async { [weak self] in
       self?.eventSink?(data)
@@ -134,17 +146,17 @@ class BluetoothConnectionStreamHandler: NSObject, FlutterStreamHandler {
 
 class BluetoothDataStreamHandler: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
-  
+
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
     return nil
   }
-  
+
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     eventSink = nil
     return nil
   }
-  
+
   func send(_ data: Any) {
     DispatchQueue.main.async { [weak self] in
       self?.eventSink?(data)
@@ -152,16 +164,23 @@ class BluetoothDataStreamHandler: NSObject, FlutterStreamHandler {
   }
 }
 
-// MARK: - Bluetooth Manager
-class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
-  private var centralManager: CBCentralManager!
-  private var connectedPeripheral: CBPeripheral?
-  private var characteristics: [CBCharacteristic] = []
-  
+// MARK: - Accessory Manager
+// All state here is touched on the main thread only; stream I/O lives on StreamThread.
+class AccessoryManager: NSObject {
   private let stateHandler: BluetoothStateStreamHandler
   private let connectionHandler: BluetoothConnectionStreamHandler
   private let dataHandler: BluetoothDataStreamHandler
-  
+
+  private let ioThread = StreamThread()
+  private var sessions: [AccessorySession] = []
+  private var connectedAccessory: EAAccessory?
+  private var discoveredDevices: [[String: Any]] = []
+  private var discoveredIds = Set<Int>()
+
+  // Declaration order in Info.plist decides the default write target for sendData.
+  private let declaredProtocols: [String] =
+    Bundle.main.object(forInfoDictionaryKey: "UISupportedExternalAccessoryProtocols") as? [String] ?? []
+
   init(stateHandler: BluetoothStateStreamHandler,
        connectionHandler: BluetoothConnectionStreamHandler,
        dataHandler: BluetoothDataStreamHandler) {
@@ -169,153 +188,307 @@ class BluetoothManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     self.connectionHandler = connectionHandler
     self.dataHandler = dataHandler
     super.init()
-    centralManager = CBCentralManager(delegate: self, queue: nil)
+
+    let manager = EAAccessoryManager.shared()
+    NotificationCenter.default.addObserver(self, selector: #selector(accessoryDidConnect(_:)),
+                                           name: .EAAccessoryDidConnect, object: manager)
+    NotificationCenter.default.addObserver(self, selector: #selector(accessoryDidDisconnect(_:)),
+                                           name: .EAAccessoryDidDisconnect, object: manager)
+    manager.registerForLocalNotifications()
+    ioThread.start()
   }
-  
-  func isBluetoothEnabled(completion: @escaping FlutterResult) {
-    let isEnabled = centralManager.state == .poweredOn
-    completion(isEnabled)
-  }
-  
+
   func getPairedDevices(completion: @escaping FlutterResult) {
-    // iOS doesn't maintain a list of paired devices
-    completion([])
+    completion(supportedAccessories().map(deviceMap))
   }
-  
+
+  func getDiscoveredDevices(completion: @escaping FlutterResult) {
+    completion(discoveredDevices)
+  }
+
   func startDiscovery(completion: @escaping FlutterResult) {
-    guard centralManager.state == .poweredOn else {
-      completion(FlutterError(code: "BLUETOOTH_OFF",
-                            message: "Bluetooth is not enabled",
-                            details: nil))
-      return
-    }
-    
-    centralManager.scanForPeripherals(withServices: nil)
+    discoveredDevices.removeAll()
+    discoveredIds.removeAll()
+    supportedAccessories().forEach(reportDiscovered)
+
+    // Pairing a new accessory is only possible through the system picker; a successful pick
+    // surfaces as EAAccessoryDidConnect, so the completion's error is not needed here.
+    EAAccessoryManager.shared().showBluetoothAccessoryPicker(withNameFilter: nil, completion: nil)
     completion(true)
   }
-  
-  func stopDiscovery(completion: @escaping FlutterResult) {
-    centralManager.stopScan()
-    completion(true)
-  }
-  
+
   func connect(address: String, completion: @escaping FlutterResult) {
-    guard let uuid = UUID(uuidString: address),
-          let peripheral = centralManager.retrievePeripherals(withIdentifiers: [uuid]).first else {
+    guard let accessory = supportedAccessories().first(where: {
+      self.address(of: $0) == address || String($0.connectionID) == address
+    }) else {
       completion(FlutterError(code: "DEVICE_NOT_FOUND",
-                            message: "Device not found",
+                            message: "Accessory not connected to this device. Pair it in Settings or via startDiscovery.",
                             details: nil))
       return
     }
-    
-    connectedPeripheral = peripheral
-    peripheral.delegate = self
-    centralManager.connect(peripheral, options: nil)
-    completion(true)
-  }
-  
-  func disconnect(completion: @escaping FlutterResult) {
-    if let peripheral = connectedPeripheral {
-      centralManager.cancelPeripheralConnection(peripheral)
-    }
-    completion(true)
-  }
-  
-  func sendData(_ data: Data, completion: @escaping FlutterResult) {
-    guard let characteristic = characteristics.first else {
-      completion(FlutterError(code: "NOT_CONNECTED",
-                            message: "No characteristic available",
+
+    closeSessions()
+
+    let deviceAddress = self.address(of: accessory)
+    let connectionID = accessory.connectionID
+    let dataHandler = self.dataHandler
+
+    // EASession is per protocol, e.g. Emlid reads com.emlid.nmea and writes com.emlid.corrections.
+    sessions = declaredProtocols
+      .filter { accessory.protocolStrings.contains($0) }
+      .compactMap { protocolString in
+        AccessorySession(
+          accessory: accessory,
+          protocolString: protocolString,
+          thread: ioThread,
+          onData: { data in
+            dataHandler.send([
+              "deviceAddress": deviceAddress,
+              "data": FlutterStandardTypedData(bytes: data)
+            ])
+          },
+          onFailure: { [weak self] in
+            DispatchQueue.main.async { self?.handleLinkLost(connectionID: connectionID) }
+          })
+      }
+
+    guard !sessions.isEmpty else {
+      completion(FlutterError(code: "SESSION_FAILED",
+                            message: "Could not open a session for any declared protocol",
                             details: nil))
       return
     }
-    
-    connectedPeripheral?.writeValue(data, for: characteristic, type: .withResponse)
-    completion(true)
-  }
-  
-  // MARK: - CBCentralManagerDelegate
-  func centralManagerDidUpdateState(_ central: CBCentralManager) {
-    let isEnabled = central.state == .poweredOn
-    let status: String
-    
-    switch central.state {
-    case .poweredOn:
-      status = "ON"
-    case .poweredOff:
-      status = "OFF"
-    case .resetting:
-      status = "RESETTING"
-    case .unauthorized:
-      status = "UNAUTHORIZED"
-    case .unsupported:
-      status = "UNSUPPORTED"
-    case .unknown:
-      status = "UNKNOWN"
-    @unknown default:
-      status = "UNKNOWN"
-    }
-    
-    stateHandler.send([
-      "isEnabled": isEnabled,
-      "status": status
-    ])
-  }
-  
-  func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
-                     advertisementData: [String : Any], rssi RSSI: NSNumber) {
-    let deviceMap: [String: Any] = [
-      "name": peripheral.name ?? "Unknown",
-      "address": peripheral.identifier.uuidString,
-      "paired": false
-    ]
-    
-    stateHandler.send([
-      "event": "deviceFound",
-      "device": deviceMap
-    ])
-  }
-  
-  func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    peripheral.discoverServices(nil)
-    
+
+    connectedAccessory = accessory
+    sessions.forEach { $0.open() }
+
     connectionHandler.send([
       "isConnected": true,
-      "deviceAddress": peripheral.identifier.uuidString,
+      "deviceAddress": deviceAddress,
       "status": "CONNECTED"
     ])
+    completion(true)
   }
-  
-  func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+
+  func disconnect(completion: @escaping FlutterResult) {
+    // Only closes our sessions; iOS owns the Bluetooth link itself and keeps it up.
+    if let accessory = connectedAccessory {
+      closeSessions()
+      sendDisconnected(address(of: accessory))
+    }
+    completion(true)
+  }
+
+  func sendData(_ data: Data, protocolString: String?, completion: @escaping FlutterResult) {
+    let target: AccessorySession?
+    if let protocolString = protocolString {
+      target = sessions.first { $0.protocolString == protocolString }
+    } else {
+      target = sessions.first
+    }
+
+    guard let session = target else {
+      completion(FlutterError(code: "NOT_CONNECTED",
+                            message: "No open session for the requested protocol",
+                            details: nil))
+      return
+    }
+
+    session.write(data)
+    completion(true)
+  }
+
+  // MARK: - Helpers
+  private func supportedAccessories() -> [EAAccessory] {
+    EAAccessoryManager.shared().connectedAccessories.filter {
+      !Set($0.protocolStrings).isDisjoint(with: declaredProtocols)
+    }
+  }
+
+  // serialNumber survives reconnects; connectionID is reassigned every time the link comes up.
+  private func address(of accessory: EAAccessory) -> String {
+    accessory.serialNumber.isEmpty ? String(accessory.connectionID) : accessory.serialNumber
+  }
+
+  private func deviceMap(_ accessory: EAAccessory) -> [String: Any] {
+    [
+      "name": accessory.name,
+      "address": address(of: accessory),
+      "paired": true
+    ]
+  }
+
+  private func reportDiscovered(_ accessory: EAAccessory) {
+    guard discoveredIds.insert(accessory.connectionID).inserted else { return }
+
+    let device = deviceMap(accessory)
+    discoveredDevices.append(device)
+    stateHandler.send([
+      "event": "deviceFound",
+      "device": device
+    ])
+  }
+
+  private func closeSessions() {
+    sessions.forEach { $0.close() }
+    sessions.removeAll()
+    connectedAccessory = nil
+  }
+
+  private func handleLinkLost(connectionID: Int) {
+    guard let accessory = connectedAccessory, accessory.connectionID == connectionID else { return }
+    closeSessions()
+    sendDisconnected(address(of: accessory))
+  }
+
+  private func sendDisconnected(_ deviceAddress: String) {
     connectionHandler.send([
       "isConnected": false,
-      "deviceAddress": peripheral.identifier.uuidString,
+      "deviceAddress": deviceAddress,
       "status": "DISCONNECTED"
     ])
   }
-  
-  // MARK: - CBPeripheralDelegate
-  func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-    peripheral.services?.forEach { service in
-      peripheral.discoverCharacteristics(nil, for: service)
-    }
+
+  @objc private func accessoryDidConnect(_ notification: Notification) {
+    guard let accessory = notification.userInfo?[EAAccessoryKey] as? EAAccessory,
+          !Set(accessory.protocolStrings).isDisjoint(with: declaredProtocols) else { return }
+    reportDiscovered(accessory)
   }
-  
-  func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-    if let characteristics = service.characteristics {
-      self.characteristics.append(contentsOf: characteristics)
-      characteristics.forEach { characteristic in
-        peripheral.setNotifyValue(true, for: characteristic)
+
+  @objc private func accessoryDidDisconnect(_ notification: Notification) {
+    guard let accessory = notification.userInfo?[EAAccessoryKey] as? EAAccessory else { return }
+    handleLinkLost(connectionID: accessory.connectionID)
+  }
+}
+
+// MARK: - Accessory Session
+// One EASession and its streams. Everything below runs on the StreamThread.
+final class AccessorySession: NSObject, StreamDelegate {
+  let protocolString: String
+
+  private let session: EASession
+  private let thread: StreamThread
+  private let onData: (Data) -> Void
+  private let onFailure: () -> Void
+
+  private var pendingWrite = Data()
+  private var readBuffer = [UInt8](repeating: 0, count: 4096)
+
+  init?(accessory: EAAccessory,
+        protocolString: String,
+        thread: StreamThread,
+        onData: @escaping (Data) -> Void,
+        onFailure: @escaping () -> Void) {
+    guard let session = EASession(accessory: accessory, forProtocol: protocolString) else { return nil }
+    self.protocolString = protocolString
+    self.session = session
+    self.thread = thread
+    self.onData = onData
+    self.onFailure = onFailure
+    super.init()
+  }
+
+  private var streams: [Stream] {
+    let all: [Stream?] = [session.inputStream, session.outputStream]
+    return all.compactMap { $0 }
+  }
+
+  func open() {
+    thread.enqueue { [self] in
+      for stream in streams {
+        stream.delegate = self
+        stream.schedule(in: .current, forMode: .default)
+        stream.open()
       }
     }
   }
-  
-  func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-    if let data = characteristic.value {
-      let bytes = [UInt8](data)
-      dataHandler.send([
-        "deviceAddress": peripheral.identifier.uuidString,
-        "data": bytes.map { Int($0) }
-      ])
+
+  func close() {
+    // The block keeps self (and the EASession) alive until the streams are torn down.
+    thread.enqueue { [self] in
+      for stream in streams {
+        stream.close()
+        stream.remove(from: .current, forMode: .default)
+        stream.delegate = nil
+      }
+      pendingWrite.removeAll()
     }
+  }
+
+  func write(_ data: Data) {
+    thread.enqueue { [self] in
+      pendingWrite.append(data)
+      flush()
+    }
+  }
+
+  // The output stream may accept only part of the buffer; the rest goes out on the next hasSpaceAvailable.
+  private func flush() {
+    guard let output = session.outputStream, output.hasSpaceAvailable, !pendingWrite.isEmpty else { return }
+
+    let written = pendingWrite.withUnsafeBytes { raw in
+      output.write(raw.bindMemory(to: UInt8.self).baseAddress!, maxLength: raw.count)
+    }
+    if written > 0 {
+      pendingWrite.removeFirst(written)
+    }
+  }
+
+  func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+    switch eventCode {
+    case .hasBytesAvailable:
+      guard let input = aStream as? InputStream else { return }
+      while input.hasBytesAvailable {
+        let count = input.read(&readBuffer, maxLength: readBuffer.count)
+        if count <= 0 { break }
+        onData(Data(readBuffer[0..<count]))
+      }
+
+    case .hasSpaceAvailable:
+      flush()
+
+    case .errorOccurred, .endEncountered:
+      onFailure()
+
+    default:
+      break
+    }
+  }
+}
+
+// MARK: - Stream Thread
+// EASession streams deliver events through a run loop. A dedicated one keeps NMEA/RTCM
+// flowing even when the main thread stalls on UI work.
+final class StreamThread: Thread {
+  private var runLoop: RunLoop?
+  private let ready = DispatchSemaphore(value: 0)
+
+  override init() {
+    super.init()
+    name = "flutter_bluetooth_classic.io"
+    qualityOfService = .userInitiated
+  }
+
+  override func start() {
+    super.start()
+    ready.wait()
+  }
+
+  override func main() {
+    runLoop = RunLoop.current
+    // A run loop with no input sources returns immediately; the port keeps it alive between sessions.
+    RunLoop.current.add(NSMachPort(), forMode: .default)
+    ready.signal()
+
+    while !isCancelled {
+      RunLoop.current.run(mode: .default, before: .distantFuture)
+    }
+  }
+
+  func enqueue(_ block: @escaping () -> Void) {
+    guard let runLoop = runLoop else { return }
+    runLoop.perform(inModes: [.default], block: block)
+    // perform(inModes:) does not wake a sleeping run loop by itself.
+    CFRunLoopWakeUp(runLoop.getCFRunLoop())
   }
 }

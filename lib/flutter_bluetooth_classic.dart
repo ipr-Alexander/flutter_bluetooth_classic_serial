@@ -153,10 +153,17 @@ class FlutterBluetoothClassic {
     }
   }
 
-  /// Send data to the connected device
-  Future<bool> sendData(List<int> data) async {
+  /// Send data to the connected device.
+  ///
+  /// [protocol] selects the iOS ExternalAccessory session to write to, e.g.
+  /// `com.emlid.corrections`. It defaults to the first protocol declared in
+  /// Info.plist and is ignored on other platforms.
+  Future<bool> sendData(List<int> data, {String? protocol}) async {
     try {
-      return await _channel.invokeMethod('sendData', {'data': data});
+      return await _channel.invokeMethod('sendData', {
+        'data': data,
+        if (protocol != null) 'protocol': protocol,
+      });
     } catch (e) {
       throw BluetoothException('Failed to send data: $e');
     }
