@@ -1,3 +1,16 @@
+## 1.0.3
+
+### Bug Fixes
+- 📱 Added missing iOS podspec, fixing "No podspec found" CocoaPods errors
+- 🛠️ Fixed iOS plugin class name in pubspec.yaml so the generated registrant compiles
+- 🤖 Bumped Android `compileSdkVersion` to 36
+
+### Changes
+- 🍎 iOS now uses ExternalAccessory (MFi Bluetooth Classic) instead of CoreBluetooth (BLE).
+  Apps must declare their accessory protocols under `UISupportedExternalAccessoryProtocols`
+- 📡 `sendData` takes an optional `protocol` to pick the iOS accessory session to write to
+- ✅ Added CI that analyzes, tests and builds the example for Android, iOS and Windows
+
 ## 1.0.2
 
 ### Bug Fixes

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'flutter_bluetooth_classic'
-  s.version          = '1.0.2'
+  s.version          = '1.0.3'
   s.summary          = 'Flutter plugin for Bluetooth communication.'
   s.description      = <<-DESC
 Flutter plugin for Bluetooth device discovery, connection management and data transmission.
